@@ -109,6 +109,10 @@
     const generateBtn = document.getElementById('generateBtn');
     const resetBtn = document.getElementById('resetBtn');
     const engineStatus = document.getElementById('engineStatus');
+    const overallProgress = document.getElementById('overallProgress');
+    const overallCounter = document.getElementById('overallCounter');
+    const overallFill = document.getElementById('overallFill');
+    const stepTexts = {};
 
     dropzone.addEventListener('click', () => fileInput.click());
     ['dragover','dragenter'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
@@ -184,6 +188,14 @@
       state.segments[i].status = status;
       const tag = segmentList.querySelector(`[data-status="${i}"]`);
       if (tag){ tag.textContent = status; tag.className = 'status-tag ' + (status==='procesando'?'processing':status==='listo'?'done':status==='error'?'error':''); }
+      if (status === 'procesando'){
+        overallCounter.textContent = `Generando parte ${i+1} de ${state.segments.length}`;
+      }
+    }
+    function setStepText(i, text){
+      stepTexts[i] = text;
+      const label = segmentList.querySelector(`[data-label="${i}"]`);
+      if (label) label.textContent = text;
     }
     function setProgress(i, pct){
       const track = segmentList.querySelector(`[data-track="${i}"]`);
@@ -192,7 +204,15 @@
       if (!track || !fill) return;
       track.classList.add('show'); fill.style.width = pct + '%';
       if (pct >= 100) fill.classList.add('done');
-      if (label) label.textContent = pct + '%';
+      if (label) label.textContent = (stepTexts[i] ? stepTexts[i] + ' ' : '') + pct + '%';
+      updateOverallProgress(i, pct);
+    }
+    function updateOverallProgress(i, pct){
+      const total = state.segments.length;
+      if (!total) return;
+      const overallPct = Math.min(100, Math.round(((i * 100) + pct) / (total * 100) * 100));
+      overallFill.style.width = overallPct + '%';
+      overallFill.classList.toggle('done', overallPct >= 100);
     }
 
     function drawCaption(ctx, canvas, text){
@@ -226,9 +246,11 @@
     }
 
     async function processSegment(ffmpeg, seg, inputName, w, h){
+      const i = seg.index - 1;
       const outName = `out_${seg.index}.mp4`;
       let pngName = null;
       if (seg.caption && seg.caption.trim()){
+        setStepText(i, 'Preparando mensaje…');
         const pngBlob = await buildCaptionPNG(w, h, seg.caption);
         pngName = `cap_${seg.index}.png`;
         await ffmpeg.writeFile(pngName, new Uint8Array(await pngBlob.arrayBuffer()));
@@ -243,9 +265,11 @@
         args = ['-ss', String(seg.start), '-t', String(duration.toFixed(3)), '-i', inputName,
           '-c:v','libx264','-preset','ultrafast','-crf','26','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart', outName];
       }
-      activeProgressCb = (p) => setProgress(seg.index - 1, Math.round(p * 100));
+      setStepText(i, 'Codificando…');
+      activeProgressCb = (p) => setProgress(i, Math.round(p * 100));
       await ffmpeg.exec(args);
       activeProgressCb = null;
+      setStepText(i, 'Finalizando…');
       const data = await ffmpeg.readFile(outName);
       const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
       try { await ffmpeg.deleteFile(outName); } catch(e){}
@@ -257,6 +281,9 @@
       clearError();
       generateBtn.disabled = true;
       const originalLabel = generateBtn.textContent;
+      overallProgress.classList.remove('hidden');
+      overallCounter.textContent = 'Preparando…';
+      overallFill.style.width = '0%'; overallFill.classList.remove('done');
       try{
         if (!ffmpegInstance){ engineStatus.classList.add('show'); generateBtn.textContent = 'Cargando motor…'; }
         const ffmpeg = await withTimeout(getFFmpeg(), 45000, 'El motor de video tardó demasiado en cargar (puede ser la conexión o un bloqueo del navegador).');
@@ -272,15 +299,17 @@
             const url = await withTimeout(processSegment(ffmpeg, seg, inputName, w, h), 90000, 'Esta parte tardó demasiado en procesarse.');
             if (seg.blobUrl) URL.revokeObjectURL(seg.blobUrl);
             seg.blobUrl = url;
-            setStatus(i, 'listo'); setProgress(i, 100);
+            setStatus(i, 'listo'); setStepText(i, 'Listo'); setProgress(i, 100);
             const resultEl = segmentList.querySelector(`[data-result="${i}"]`);
             resultEl.classList.remove('hidden');
             resultEl.innerHTML = `<video class="result-video" src="${url}" controls playsinline></video><a href="${url}" download="parte-${seg.index}.mp4">Descargar parte ${seg.index}</a>`;
-          } catch(err){ console.error(err); setStatus(i, 'error'); }
+          } catch(err){ console.error(err); setStatus(i, 'error'); setStepText(i, 'Error'); updateOverallProgress(i, 100); }
         }
         document.getElementById('stepNum3').classList.add('done');
         document.getElementById('stepNum4').classList.add('done');
         generateBtn.textContent = 'Listo — generar de nuevo';
+        const total = state.segments.length;
+        overallCounter.textContent = `Listo — ${total} de ${total} generada${total===1?'':'s'}`;
       } catch(err){
         console.error(err); engineStatus.classList.remove('show');
         showError(err && err.message ? err.message : 'No se pudo cargar el motor de video. Revisá tu conexión e intentá de nuevo.');
@@ -327,6 +356,10 @@
     const photoGenerateBtn = document.getElementById('photoGenerateBtn');
     const photoResetBtn = document.getElementById('photoResetBtn');
     const photoEngineStatus = document.getElementById('photoEngineStatus');
+    const photoOverallProgress = document.getElementById('photoOverallProgress');
+    const photoOverallCounter = document.getElementById('photoOverallCounter');
+    const photoOverallFill = document.getElementById('photoOverallFill');
+    const pStepTexts = {};
 
     // color swatches
     PALETTE.forEach((c, i) => {
@@ -457,6 +490,15 @@
       pstate.parts[i].status = status;
       const tag = photoPartList.querySelector(`[data-pstatus="${i}"]`);
       if (tag){ tag.textContent = status; tag.className = 'status-tag ' + (status==='procesando'?'processing':status==='listo'?'done':status==='error'?'error':''); }
+      if (status === 'procesando'){
+        const noun = pstate.outputMode === 'individual' ? 'foto' : 'parte';
+        photoOverallCounter.textContent = `Generando ${noun} ${i+1} de ${pstate.parts.length}`;
+      }
+    }
+    function setPStepText(i, text){
+      pStepTexts[i] = text;
+      const label = photoPartList.querySelector(`[data-plabel="${i}"]`);
+      if (label) label.textContent = text;
     }
     function setPProgress(i, pct){
       const track = photoPartList.querySelector(`[data-ptrack="${i}"]`);
@@ -465,7 +507,15 @@
       if (!track || !fill) return;
       track.classList.add('show'); fill.style.width = pct + '%';
       if (pct >= 100) fill.classList.add('done');
-      if (label) label.textContent = pct + '%';
+      if (label) label.textContent = (pStepTexts[i] ? pStepTexts[i] + ' ' : '') + pct + '%';
+      updatePOverallProgress(i, pct);
+    }
+    function updatePOverallProgress(i, pct){
+      const total = pstate.parts.length;
+      if (!total) return;
+      const overallPct = Math.min(100, Math.round(((i * 100) + pct) / (total * 100) * 100));
+      photoOverallFill.style.width = overallPct + '%';
+      photoOverallFill.classList.toggle('done', overallPct >= 100);
     }
 
     // ---- styled caption drawing (3 shapes x 5 colors) ----
@@ -546,16 +596,20 @@
 
     // ---- individual image export (canvas only, no ffmpeg) ----
     async function processImagePart(part){
+      const i = part.index - 1;
+      setPStepText(i, 'Cargando foto…');
       return new Promise((resolve, reject) => {
         const photo = part.photos[0];
         const img = new Image();
         img.onload = () => {
+          setPStepText(i, 'Aplicando mensaje…');
           const dims = capDim(img.naturalWidth, img.naturalHeight, 1600);
           const canvas = document.createElement('canvas');
           canvas.width = dims.w; canvas.height = dims.h;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, dims.w, dims.h);
           drawStyledCaption(ctx, canvas, part.caption);
+          setPStepText(i, 'Guardando imagen…');
           canvas.toBlob(blob => {
             if (!blob) return reject(new Error('No se pudo generar la imagen'));
             resolve(URL.createObjectURL(blob));
@@ -568,6 +622,7 @@
 
     // ---- slideshow video export (ffmpeg) ----
     async function processSlideshowPart(ffmpeg, part){
+      const partIdx = part.index - 1;
       const first = part.photos[0];
       const dims = capDim(first.width, first.height, 1280);
       const W = dims.w, H = dims.h;
@@ -576,6 +631,7 @@
       const fps = 25;
       const FD = Math.min(0.5, Dp * 0.3);
 
+      setPStepText(partIdx, 'Preparando fotos…');
       const inputNames = [];
       for (let i = 0; i < k; i++){
         const name = `p${part.index}_${i}.` + extOf(part.photos[i].file.name || 'jpg');
@@ -585,6 +641,7 @@
 
       let pngName = null;
       if (part.caption && part.caption.trim()){
+        setPStepText(partIdx, 'Preparando mensaje…');
         const canvas = document.createElement('canvas');
         canvas.width = W; canvas.height = H;
         const ctx = canvas.getContext('2d');
@@ -634,9 +691,11 @@
         '-c:v','libx264','-preset','ultrafast','-crf','26','-pix_fmt','yuv420p','-r', String(fps),
         '-movflags','+faststart', outName);
 
-      activeProgressCb = (p) => setPProgress(part.index - 1, Math.round(p * 100));
+      setPStepText(partIdx, 'Aplicando transición…');
+      activeProgressCb = (p) => { setPStepText(partIdx, 'Codificando…'); setPProgress(partIdx, Math.round(p * 100)); };
       await ffmpeg.exec(args);
       activeProgressCb = null;
+      setPStepText(partIdx, 'Finalizando…');
 
       const data = await ffmpeg.readFile(outName);
       const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
@@ -651,6 +710,9 @@
       photoGenerateBtn.disabled = true;
       const originalLabel = photoGenerateBtn.textContent;
       const needsEngine = pstate.parts.some(p => p.kind === 'video');
+      photoOverallProgress.classList.remove('hidden');
+      photoOverallCounter.textContent = 'Preparando…';
+      photoOverallFill.style.width = '0%'; photoOverallFill.classList.remove('done');
       try{
         let ffmpeg = null;
         if (needsEngine){
@@ -669,7 +731,7 @@
               : await withTimeout(processSlideshowPart(ffmpeg, part), 120000, 'Esta parte tardó demasiado en procesarse (probá con "Corte seco" o menos fotos por parte).');
             if (part.resultUrl) URL.revokeObjectURL(part.resultUrl);
             part.resultUrl = url;
-            setPStatus(i, 'listo'); setPProgress(i, 100);
+            setPStatus(i, 'listo'); setPStepText(i, 'Listo'); setPProgress(i, 100);
             const resultEl = photoPartList.querySelector(`[data-presult="${i}"]`);
             resultEl.classList.remove('hidden');
             if (part.kind === 'image'){
@@ -677,11 +739,13 @@
             } else {
               resultEl.innerHTML = `<video class="result-video" src="${url}" controls playsinline></video><a href="${url}" download="parte-${part.index}.mp4">Descargar parte ${part.index}</a>`;
             }
-          } catch(err){ console.error(err); setPStatus(i, 'error'); }
+          } catch(err){ console.error(err); setPStatus(i, 'error'); setPStepText(i, 'Error'); updatePOverallProgress(i, 100); }
         }
         document.getElementById('pStepNum4').classList.add('done');
         document.getElementById('pStepNum5').classList.add('done');
         photoGenerateBtn.textContent = 'Listo — generar de nuevo';
+        const total = pstate.parts.length;
+        photoOverallCounter.textContent = `Listo — ${total} de ${total} generada${total===1?'':'s'}`;
       } catch(err){
         console.error(err); photoEngineStatus.classList.remove('show');
         showError(err && err.message ? err.message : 'No se pudo cargar el motor de video. Revisá tu conexión e intentá de nuevo.');

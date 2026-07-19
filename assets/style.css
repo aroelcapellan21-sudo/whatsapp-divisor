@@ -81,6 +81,10 @@
   img.result-img{ max-height:220px; border-radius:10px; display:block; }
   .result a{ display:inline-block; margin-top:8px; color:var(--ok); font-size:13px; font-weight:600; text-decoration:none; border:1px solid var(--ok-soft); background:var(--ok-soft); padding:7px 12px; border-radius:9px; }
 
+  .overall-progress{ margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border); }
+  .overall-counter{ font-size:13.5px; font-weight:600; color:var(--text); margin-bottom:8px; }
+  .overall-progress .progress-track{ margin-top:0; height:8px; }
+
   .engine-status{ font-size:13px; color:var(--text-dim); display:none; align-items:center; gap:8px; margin-bottom:10px; }
   .engine-status.show{ display:flex; }
   .spinner{ width:14px; height:14px; border-radius:50%; border:2px solid var(--border); border-top-color:var(--accent); animation:spin .8s linear infinite; }
