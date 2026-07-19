@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Divisor para WhatsApp</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Divisor para WhatsApp</h1>
+    <p class="lede">Video o fotos: armá partes con mensaje, listas para compartir. Todo se procesa dentro del navegador, en cualquier teléfono.</p>
+  </header>
+
+  <div class="segmented">
+    <button id="modeVideoBtn" class="active">🎬 Video</button>
+    <button id="modePhotoBtn">🖼️ Fotos</button>
+  </div>
+
+  <div class="warn" id="errorBanner"></div>
+
+  <!-- ============ VIDEO MODE ============ -->
+  <div id="videoMode">
+    <div class="card">
+      <div class="step-head"><span class="step-num" id="stepNum1">1</span><span class="step-title">Video</span></div>
+      <div id="dropzone" class="dropzone">
+        <strong>Tocá para elegir un video</strong><span>o arrastralo acá</span>
+        <input type="file" id="fileInput" accept="video/*">
+      </div>
+      <div id="videoShell" class="video-shell hidden">
+        <video id="preview" controls playsinline></video>
+        <div class="meta" id="videoMeta" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div class="card hidden" id="durationCard">
+      <div class="step-head"><span class="step-num" id="stepNum2">2</span><span class="step-title">Duración de cada parte</span></div>
+      <div class="row">
+        <label class="meta" for="segSeconds">Segundos por parte</label>
+        <input type="number" id="segSeconds" min="1" value="30">
+        <button class="btn-ghost" id="recalcBtn">Recalcular</button>
+      </div>
+      <div class="meta" id="segSummary" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card hidden" id="segmentsCard">
+      <div class="step-head"><span class="step-num" id="stepNum3">3</span><span class="step-title">Mensaje para cada parte</span></div>
+      <div id="segmentList"></div>
+    </div>
+
+    <div class="card hidden" id="generateCard">
+      <div class="step-head"><span class="step-num" id="stepNum4">4</span><span class="step-title">Generar</span></div>
+      <div class="engine-status" id="engineStatus"><span class="spinner"></span><span>Cargando el motor de video (una sola vez, ~30 MB)…</span></div>
+      <button class="btn-primary btn-full" id="generateBtn">Generar clips</button>
+      <p class="footnote">La primera vez tarda más porque descarga el motor de video. Al terminar, descargá cada clip y compartilo desde WhatsApp.</p>
+    </div>
+
+    <button class="btn-ghost btn-full hidden" id="resetBtn" style="margin-top:4px;">Empezar de nuevo</button>
+  </div>
+
+  <!-- ============ PHOTO MODE ============ -->
+  <div id="photoMode" class="hidden">
+    <div class="card">
+      <div class="step-head"><span class="step-num" id="pStepNum1">1</span><span class="step-title">Fotos</span></div>
+      <div id="photoDropzone" class="dropzone">
+        <strong>Tocá para elegir fotos</strong><span>podés elegir varias a la vez</span>
+        <input type="file" id="photoInput" accept="image/*" multiple>
+      </div>
+      <div class="thumbs" id="photoThumbs"></div>
+    </div>
+
+    <div class="card hidden" id="photoOutputCard">
+      <div class="step-head"><span class="step-num" id="pStepNum2">2</span><span class="step-title">¿Qué querés armar?</span></div>
+      <div class="toggle2">
+        <button id="modeIndividualBtn" class="active">Fotos individuales</button>
+        <button id="modeSlideshowBtn">Video / diapositivas</button>
+      </div>
+      <p class="footnote" id="outputModeHint">Cada foto lleva su mensaje y se descarga como imagen suelta. No necesita descargar ningún motor, es instantáneo.</p>
+
+      <div id="slideshowOptions" class="hidden" style="margin-top:10px;">
+        <div class="row">
+          <label class="meta" for="groupSize">Fotos por parte</label>
+          <input type="number" id="groupSize" min="1" value="1">
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label class="meta" for="photoDuration">Segundos por foto</label>
+          <input type="number" id="photoDuration" min="0.5" step="0.5" value="2.5">
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label class="meta" for="transitionSelect">Transición</label>
+          <select id="transitionSelect">
+            <option value="corte">Corte seco</option>
+            <option value="fundido">Fundido</option>
+            <option value="zoom">Zoom (efecto Ken Burns)</option>
+          </select>
+        </div>
+        <button class="btn-ghost" id="recalcPhotoBtn" style="margin-top:12px;">Recalcular partes</button>
+        <div class="meta" id="photoGroupSummary" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <div class="card hidden" id="photoStyleCard">
+      <div class="step-head"><span class="step-num" id="pStepNum3">3</span><span class="step-title">Estilo del mensaje</span></div>
+      <div class="row">
+        <label class="meta" for="styleSelect">Forma</label>
+        <select id="styleSelect">
+          <option value="classic">Clásico (barra abajo)</option>
+          <option value="ribbon">Cinta arriba</option>
+          <option value="chip">Etiqueta centrada</option>
+        </select>
+      </div>
+      <div class="meta" style="margin-top:12px;">Color</div>
+      <div class="swatches" id="colorSwatches"></div>
+    </div>
+
+    <div class="card hidden" id="photoPartsCard">
+      <div class="step-head"><span class="step-num" id="pStepNum4">4</span><span class="step-title">Mensaje para cada parte</span></div>
+      <div id="photoPartList"></div>
+    </div>
+
+    <div class="card hidden" id="photoGenerateCard">
+      <div class="step-head"><span class="step-num" id="pStepNum5">5</span><span class="step-title">Generar</span></div>
+      <div class="engine-status" id="photoEngineStatus"><span class="spinner"></span><span>Cargando el motor de video (una sola vez, ~30 MB)…</span></div>
+      <button class="btn-primary btn-full" id="photoGenerateBtn">Generar</button>
+      <p class="footnote">Fotos individuales: instantáneo. Video/diapositivas: la primera vez descarga el motor de video y cada parte tarda un poco más.</p>
+    </div>
+
+    <button class="btn-ghost btn-full hidden" id="photoResetBtn" style="margin-top:4px;">Empezar de nuevo</button>
+  </div>
+</div>
+
+<script type="module" src="assets/app.js"></script>
+</body>
+</html>
