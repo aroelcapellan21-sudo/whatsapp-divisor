@@ -5,6 +5,10 @@
   function showError(msg){ errorBanner.textContent = msg; errorBanner.style.display = 'block'; }
   function clearError(){ errorBanner.style.display = 'none'; }
 
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
   function formatTime(s){
     s = Math.max(0, Math.round(s));
     const m = Math.floor(s/60), sec = s%60;
@@ -144,10 +148,12 @@
     function computeSegments(){
       const seg = Math.max(1, parseInt(segSecondsInput.value, 10) || 30);
       const total = state.duration;
+      const prevSegments = state.segments;
       const arr = []; let t = 0, idx = 1;
       while (t < total - 0.05){
         const end = Math.min(t + seg, total);
-        arr.push({ index: idx, start: t, end: end, caption:'', status:'pendiente', blobUrl:null });
+        const i = arr.length;
+        arr.push({ index: idx, start: t, end: end, caption:(prevSegments[i] ? prevSegments[i].caption : ''), status:'pendiente', blobUrl:null });
         t = end; idx++;
       }
       state.segments = arr;
@@ -169,7 +175,7 @@
             <span class="tc">Parte ${seg.index} · ${formatTime(seg.start)}–${formatTime(seg.end)}</span>
             <span class="status-tag" data-status="${i}">${seg.status}</span>
           </div>
-          <textarea placeholder="Mensaje para esta parte (opcional)" data-caption="${i}"></textarea>
+          <textarea placeholder="Mensaje para esta parte (opcional)" data-caption="${i}">${escapeHtml(seg.caption)}</textarea>
           <div class="progress-track" data-track="${i}"><div class="progress-fill" data-fill="${i}"></div></div>
           <div class="progress-label" data-label="${i}"></div>
           <div class="result hidden" data-result="${i}"></div>
@@ -384,19 +390,24 @@
       const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
       if (!files.length) return;
       clearError();
-      files.forEach(file => {
+      // Load every file in parallel and render once at the end — loading them
+      // one-by-one with a full re-render per photo made adding many photos
+      // (e.g. from the "+" tile) get progressively slower as the list grew.
+      Promise.all(files.map(file => new Promise(resolve => {
         const url = URL.createObjectURL(file);
         const img = new Image();
-        img.onload = () => {
-          pstate.photos.push({ file, url, width: img.naturalWidth, height: img.naturalHeight });
-          renderThumbs();
-          photoOutputCard.classList.remove('hidden');
-          photoResetBtn.classList.remove('hidden');
-          document.getElementById('pStepNum1').classList.add('done');
-          computePhotoParts();
-        };
-        img.onerror = () => { showError('No se pudo cargar una de las fotos.'); };
+        img.onload = () => resolve({ file, url, width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = () => { showError('No se pudo cargar una de las fotos.'); URL.revokeObjectURL(url); resolve(null); };
         img.src = url;
+      }))).then(results => {
+        const loaded = results.filter(Boolean);
+        if (!loaded.length) return;
+        pstate.photos.push(...loaded);
+        renderThumbs();
+        photoOutputCard.classList.remove('hidden');
+        photoResetBtn.classList.remove('hidden');
+        document.getElementById('pStepNum1').classList.add('done');
+        computePhotoParts();
       });
     }
 
@@ -447,9 +458,10 @@
     function computePhotoParts(){
       if (!pstate.photos.length) return;
       document.getElementById('pStepNum2').classList.add('done');
+      const prevParts = pstate.parts;
       const arr = [];
       if (pstate.outputMode === 'individual'){
-        pstate.photos.forEach((p, i) => arr.push({ index:i+1, photos:[p], caption:'', status:'pendiente', kind:'image', resultUrl:null }));
+        pstate.photos.forEach((p, i) => arr.push({ index:i+1, photos:[p], caption:(prevParts[i] ? prevParts[i].caption : ''), status:'pendiente', kind:'image', resultUrl:null }));
         photoGroupSummary.textContent = '';
       } else {
         const size = Math.max(1, parseInt(groupSizeInput.value, 10) || 1);
@@ -458,7 +470,8 @@
         pstate.transition = transitionSelect.value;
         let idx = 1;
         for (let i = 0; i < pstate.photos.length; i += size){
-          arr.push({ index: idx++, photos: pstate.photos.slice(i, i+size), caption:'', status:'pendiente', kind:'video', resultUrl:null });
+          const partIdx = arr.length;
+          arr.push({ index: idx++, photos: pstate.photos.slice(i, i+size), caption:(prevParts[partIdx] ? prevParts[partIdx].caption : ''), status:'pendiente', kind:'video', resultUrl:null });
         }
         photoGroupSummary.textContent = `${arr.length} parte${arr.length===1?'':'s'} de hasta ${size} foto${size===1?'':'s'} cada una`;
       }
@@ -480,7 +493,7 @@
             <div class="part-head-left"><img class="part-thumb" src="${part.photos[0].url}"><span class="tc">${label}</span></div>
             <span class="status-tag" data-pstatus="${i}">${part.status}</span>
           </div>
-          <textarea placeholder="Mensaje para esta parte (opcional)" data-pcaption="${i}"></textarea>
+          <textarea placeholder="Mensaje para esta parte (opcional)" data-pcaption="${i}">${escapeHtml(part.caption)}</textarea>
           <div class="progress-track" data-ptrack="${i}"><div class="progress-fill" data-pfill="${i}"></div></div>
           <div class="progress-label" data-plabel="${i}"></div>
           <div class="result hidden" data-presult="${i}"></div>
