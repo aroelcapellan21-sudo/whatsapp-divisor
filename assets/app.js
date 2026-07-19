@@ -408,6 +408,15 @@
         div.innerHTML = `<img src="${p.url}"><span class="badge">${i+1}</span><button class="rm" data-rm="${i}">×</button>`;
         photoThumbs.appendChild(div);
       });
+      if (pstate.photos.length){
+        const addTile = document.createElement('button');
+        addTile.className = 'thumb thumb-add';
+        addTile.type = 'button';
+        addTile.setAttribute('aria-label', 'Agregar más fotos');
+        addTile.textContent = '+';
+        addTile.addEventListener('click', () => photoInput.click());
+        photoThumbs.appendChild(addTile);
+      }
       photoThumbs.querySelectorAll('[data-rm]').forEach(btn => {
         btn.addEventListener('click', () => {
           const i = parseInt(btn.getAttribute('data-rm'), 10);
