@@ -50,6 +50,10 @@
   let ffmpegInstance = null;
   let ffmpegLoadPromise = null;
   let activeProgressCb = null;
+  // Video mode and photo mode share this same ffmpeg engine/instance. Without
+  // this guard, generating in both modes at once (e.g. switch tabs mid-run and
+  // hit Generar again) makes their progress callbacks and exec() calls collide.
+  let engineBusy = false;
 
   async function getFFmpeg(){
     if (ffmpegInstance) return ffmpegInstance;
@@ -122,12 +126,20 @@
     ['dragover','dragenter'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
     ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
     dropzone.addEventListener('drop', e => { const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) handleFile(f); });
-    fileInput.addEventListener('change', e => { const f = e.target.files[0]; if (f) handleFile(f); });
+    fileInput.addEventListener('change', e => {
+      const f = e.target.files[0];
+      e.target.value = ''; // allow re-picking the exact same file (browser won't fire 'change' otherwise)
+      if (f) handleFile(f);
+    });
 
     function handleFile(file){
       if (!file.type.startsWith('video/')){ showError('Elegí un archivo de video.'); return; }
       clearError();
       if (state.url) URL.revokeObjectURL(state.url);
+      // A new file means unrelated content — drop any segments/captions/results
+      // from the previous video so they don't carry over onto the new one.
+      state.segments.forEach(s => { if (s.blobUrl) URL.revokeObjectURL(s.blobUrl); });
+      state.segments = [];
       state.file = file;
       state.url = URL.createObjectURL(file);
       preview.src = state.url;
@@ -285,6 +297,8 @@
 
     generateBtn.addEventListener('click', async () => {
       clearError();
+      if (engineBusy){ showError('Ya hay una generación en curso en la otra pestaña (Video/Fotos). Esperá a que termine.'); return; }
+      engineBusy = true;
       generateBtn.disabled = true;
       const originalLabel = generateBtn.textContent;
       overallProgress.classList.remove('hidden');
@@ -320,7 +334,7 @@
         console.error(err); engineStatus.classList.remove('show');
         showError(err && err.message ? err.message : 'No se pudo cargar el motor de video. Revisá tu conexión e intentá de nuevo.');
         generateBtn.textContent = originalLabel;
-      } finally { generateBtn.disabled = false; }
+      } finally { generateBtn.disabled = false; engineBusy = false; }
     });
 
     resetBtn.addEventListener('click', () => {
@@ -384,7 +398,13 @@
     ['dragover','dragenter'].forEach(evt => photoDropzone.addEventListener(evt, e => { e.preventDefault(); photoDropzone.classList.add('drag'); }));
     ['dragleave','drop'].forEach(evt => photoDropzone.addEventListener(evt, e => { e.preventDefault(); photoDropzone.classList.remove('drag'); }));
     photoDropzone.addEventListener('drop', e => { handlePhotoFiles(e.dataTransfer.files); });
-    photoInput.addEventListener('change', e => { handlePhotoFiles(e.target.files); });
+    photoInput.addEventListener('change', e => {
+      // FileList is live — copy it to a plain array before resetting the
+      // input's value, otherwise the reset empties this reference too.
+      const files = Array.from(e.target.files || []);
+      e.target.value = ''; // allow re-picking the exact same photo(s) (browser won't fire 'change' otherwise)
+      handlePhotoFiles(files);
+    });
 
     function handlePhotoFiles(fileList){
       const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
@@ -729,9 +749,11 @@
 
     photoGenerateBtn.addEventListener('click', async () => {
       clearError();
+      const needsEngine = pstate.parts.some(p => p.kind === 'video');
+      if (needsEngine && engineBusy){ showError('Ya hay una generación en curso en la otra pestaña (Video/Fotos). Esperá a que termine.'); return; }
+      if (needsEngine) engineBusy = true;
       photoGenerateBtn.disabled = true;
       const originalLabel = photoGenerateBtn.textContent;
-      const needsEngine = pstate.parts.some(p => p.kind === 'video');
       photoOverallProgress.classList.remove('hidden');
       photoOverallCounter.textContent = 'Preparando…';
       photoOverallFill.style.width = '0%'; photoOverallFill.classList.remove('done');
@@ -772,7 +794,7 @@
         console.error(err); photoEngineStatus.classList.remove('show');
         showError(err && err.message ? err.message : 'No se pudo cargar el motor de video. Revisá tu conexión e intentá de nuevo.');
         photoGenerateBtn.textContent = originalLabel;
-      } finally { photoGenerateBtn.disabled = false; }
+      } finally { photoGenerateBtn.disabled = false; if (needsEngine) engineBusy = false; }
     });
 
     photoResetBtn.addEventListener('click', () => {
