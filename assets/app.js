@@ -605,7 +605,11 @@
         let chain;
         if (pstate.transition === 'zoom'){
           const frames = Math.max(2, Math.round(Dp * fps));
-          chain = `[${i}:v]scale=${W*2}:${H*2}:force_original_aspect_ratio=increase,crop=${W*2}:${H*2},zoompan=z='min(zoom+0.0015,1.3)':d=${frames}:s=${W}x${H}:fps=${fps},setsar=1`;
+          // zoompan emits `d` frames for EVERY input frame it receives; since the
+          // -loop 1 -t Dp input keeps delivering frames for the whole duration,
+          // without trimming here it multiplies into thousands of extra frames
+          // (minutes of video) and hangs/times out. Cut hard at the first cycle.
+          chain = `[${i}:v]scale=${W*2}:${H*2}:force_original_aspect_ratio=increase,crop=${W*2}:${H*2},zoompan=z='min(zoom+0.0015,1.3)':d=${frames}:s=${W}x${H}:fps=${fps},trim=end_frame=${frames},setpts=PTS-STARTPTS,setsar=1`;
         } else {
           chain = `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${fps},setsar=1`;
           if (pstate.transition === 'fundido'){
